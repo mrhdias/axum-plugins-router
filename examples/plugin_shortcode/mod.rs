@@ -89,7 +89,7 @@ const request = new Request("{}", {{
     body: JSON.stringify({}),
 }});
 const response = await fetch(request);"#, url, json_body),
-        _ => return format!(r#"<output style="background-color:#F44336;color:#fff;padding:6px;">
+        _ => return format!(r#"<output style="background-color:#f44336;color:#fff;padding:6px;">
 Invalid method {} for url {} (only GET and POST methods available)
 </output>"#, method, url),
     };

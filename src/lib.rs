@@ -7,11 +7,12 @@ use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
 use axum::{
+    extract::RawQuery,
     response::{Html, Json, IntoResponse},
     routing::{get, post},
     Router,
 };
-use hyper::HeaderMap;
+use hyper::{HeaderMap, header::HeaderValue};
 use libloading::{Library, Symbol};
 use std::ffi::{c_char, CStr, CString};
 use once_cell::sync::Lazy;
@@ -195,11 +196,15 @@ impl Plugins {
             "html" => Html(response.to_string())
                 .into_response(),
             "json" => {
-                let parsed: Value = serde_json::from_str(response).unwrap();
-                let json_string = serde_json::to_string(&parsed).unwrap();
-                // println!("Json String: {}", json_string);
-                Json(json_string)
-                    .into_response()
+                // println!("Json String Response : {}", response.to_string());
+                let v: Value = match serde_json::from_str(response) {
+                    Ok(json_value) => json_value,
+                    Err(e) => {
+                        eprintln!("Error parsing JSON: {}", e);
+                        serde_json::Value::String(format!("Error parsing JSON: {}", e))
+                    },
+                };
+                Json(v).into_response()
             },
             _ => panic!("Unsupported response format"),
         }
@@ -294,7 +299,14 @@ impl Plugins {
                 // https://docs.rs/axum/latest/axum/extract/index.html
                 let r = Router::new()
                     .route(&route_path, match route.method_router.to_lowercase().as_str() {
-                        "get" => get(move |headers: HeaderMap, body: String| async move {
+                        "get" => get(move |
+                            RawQuery(query): RawQuery,
+                            mut headers: HeaderMap,
+                            body: String,
+                        | async move {
+                            if let Some(query) = query {
+                                headers.insert("x-raw-query", HeaderValue::from_str(&query).unwrap());
+                            }
                             let response = Self::handle_route(
                                 headers,
                                 body, 
@@ -303,7 +315,14 @@ impl Plugins {
                             ).await;
                             Self::set_response(&response, &route.response_type)
                         }),
-                        "post" => post(move |headers: HeaderMap, body: String| async move {
+                        "post" => post(move |
+                            RawQuery(query): RawQuery,
+                            mut headers: HeaderMap,
+                            body: String,
+                        | async move {
+                            if let Some(query) = query {
+                                headers.insert("x-raw-query", HeaderValue::from_str(&query).unwrap());
+                            }
                             let response = Self::handle_route(
                                 headers,
                                 body, 
