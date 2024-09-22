@@ -5,6 +5,11 @@
 use std::collections::HashMap;
 use serde::Deserialize;
 use tera::Function;
+use once_cell::sync::Lazy;
+
+static CLIENT: Lazy<reqwest::Client> = Lazy::new(|| reqwest::Client::new());
+
+use crate::ADDRESS;
 
 #[derive(Deserialize, Debug)]
 pub struct PluginShortcode {}
@@ -29,6 +34,7 @@ impl Function for PluginShortcode {
                 .trim_matches(|c| c == '"' || c == '\''),
             None => return Ok(tera::Value::String("no route specified".to_string())),
         };
+
         let method = match args.get("method") {
             Some(value) => value
                 .as_str()
@@ -36,6 +42,7 @@ impl Function for PluginShortcode {
                 .trim_matches(|c| c == '"' || c == '\''),
             None => "get",
         };
+
         let data = match args.get("data") {
             Some(value) => value
                 .as_str()
@@ -43,11 +50,14 @@ impl Function for PluginShortcode {
                 .trim_matches(|c| c == '"' || c == '\''),
             None => "",
         };
-        let block: bool = match args.get("block") {
+
+        let js_caller = match args.get("jscaller") {
             Some(value) => value
                 .as_str()
                 .unwrap()
-                .trim_matches(|c| c == '"' || c == '\'').parse().unwrap(),
+                .trim_matches(|c| c == '"' || c == '\'')
+                .parse()
+                .unwrap_or(false),
             None => false,
         };
 
@@ -55,18 +65,17 @@ impl Function for PluginShortcode {
             value.as_str().unwrap().trim_matches(|c| c == '"' || c == '\'')
         );
 
-        let fragment = if block {
-            fetch_shortcode(route, Some(method), Some(data))
-        } else {
+        let fragment = if js_caller {
             fetch_shortcode_js(route, Some(method), Some(data), alt)
+        } else {
+            fetch_shortcode(route, Some(method), Some(data))
         };
 
         Ok(tera::Value::String(fragment))
     }
 }
 
-
-fn fetch_shortcode_js(
+pub fn fetch_shortcode_js(
     url: &str,
     method: Option<&str>,
     json_body: Option<&str>,
@@ -94,6 +103,8 @@ Invalid method {} for url {} (only GET and POST methods available)
 </output>"#, method, url),
     };
 
+    // reScript function ia a trick to make the Javascript code work when inserted.
+    // Replace it with another clone element script.
     let js_code = format!(r#"<script>
 (function () {{
     async function fetchShortcodeData() {{
@@ -108,18 +119,35 @@ Invalid method {} for url {} (only GET and POST methods available)
             return "";
         }}
     }}
+    function reScript(helper) {{
+        for (const node of helper.childNodes) {{
+            if (node.hasChildNodes()) {{
+                reScript(node);
+            }}
+            if (node.nodeName === 'SCRIPT') {{
+                const script = document.createElement('script');
+                script.type = "text/javascript";
+                script.textContent = node.textContent;
+                node.replaceWith(script);
+            }}
+        }}
+    }}
     (async () => {{
         const currentScript = document.currentScript;
         const content = await fetchShortcodeData();
         // console.log(content);
-        currentScript.insertAdjacentHTML('beforebegin', content);
+        const helper = document.createElement('div');
+        helper.id = 'helper';
+        helper.innerHTML = content;
+        reScript(helper);
+        currentScript.after(...helper.childNodes);
         currentScript.remove();
     }})();
 }})();
 </script>"#,
     fetch_js);
 
-    if method.to_lowercase().as_str() == "get" && alt.is_some() && !alt.unwrap().is_empty() {
+    if method.to_lowercase().as_str() == "get" && alt.is_some() {
         let alt = alt.unwrap();
         js_code.to_string() + &format!(r#"<noscript><a href="{}">{}</a></noscript>"#, url, alt)
     } else {
@@ -136,20 +164,20 @@ pub fn fetch_shortcode(
     let method = method.unwrap_or("GET");
     let json_body = json_body.unwrap_or("{}");
 
-    let client = reqwest::Client::new();
+    let url = format!("http://{}{}", ADDRESS, url);
 
     let data_to_route = async {
         let response = match method.to_lowercase().as_str() {
-            "get" => client.get(url)
+            "get" => CLIENT.get(url)
                 .send()
                 .await,
-            "post" => client.post(url)
+            "post" => CLIENT.post(url)
                 .header("Content-Type", "application/json")
                 .body(json_body.to_owned())
                 .send()
                 .await,
-                _ => return format!("Invalid method: {}", method),
-            };
+            _ => return format!("Invalid method: {}", method),
+        };
 
         match response {
             Ok(res) => {

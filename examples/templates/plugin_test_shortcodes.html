@@ -17,41 +17,6 @@
 Data from plugin function: {{ plugin(route="/plugin/foo-bar/test-json", method='post', data=my_bag) | safe }}
 </pre>
 
-<!--
-<div>
-Payment Gateway
-{% set my_order = '{
-    "orderId": "123",
-    "amount": "100.00",
-    "clientName": "John Doe",
-    "clientEmail": "john.doe@example.com",
-    "expiryDays": "3"
-}' %}
-<style>
-.if-thenpay-mb-gateway {
-    border: 1px solid #9e9e9e;
-    border-collapse: collapse;
-    font-family: monospace;
-    text-transform: uppercase;
-}
-.if-thenpay-mb-gateway svg {
-    width: 60px;
-    height: auto;
-    padding: 10px;
-}
-
-.if-thenpay-mb-gateway td {
-    padding: 5px;
-}
-.if-thenpay-mb-gateway td:last-child {
-    text-align: center;
-    font-weight: bold;
-}
-</style>
-{{ plugin(route="/plugin/ifthenpay/multibanco", method='post', data=my_order) | safe }}
-</div>
--->
-
 ARP-Skeleton Plugin
 <ul>
 <li>Test get request: <a href="http://127.0.0.1:8080/plugin/arp-skeleton/about">http://127.0.0.1:8080/plugin/arp-skeleton/about</a></li>
@@ -88,6 +53,55 @@ ARP-Skeleton Plugin
 }
 </style>
 {{ plugin(route="/plugin/arp-skeleton/groceries", method='post') | safe }}
+
+<br>
+
+<form id="add-product">
+    <label for="name">Name:</label>
+    <input id="name" type="text" name="name" value="Sed tempor lorem" size="20" /><br>
+    <label for="image-url">Image Url:</label>
+    <input id="image-url" type="text" name="image_url" value="https://picsum.photos/250/300" size="20" /><br>
+    <label for="price">Price:</label>
+    <input id="price" type="number" name="price" value="9.99" placeholder="0.00" step="0.01" min="0" max="100" size="6" /><br>
+    <input type="submit" value="Add Product">
+</form>
+<script>
+
+(function () {
+    const form = document.getElementById('add-product');
+    form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const name = form.querySelector('#name').value;
+        const image_url = form.querySelector('#image-url').value;
+        const price = parseFloat(form.querySelector('#price').value);
+        if (name && image_url && price >= 0 && price <= 100) {
+            const data = { name, image_url, price };
+            console.log(data);
+            fetch('http://127.0.0.1:8080/plugin/arp-skeleton/products', {
+                method: 'post',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data),
+            }).then((response) => response.json())
+               .then((result) => {
+                    console.log('Product added:', result);
+                    alert('Product added successfully!');
+                })
+               .catch((error) => {
+                    console.error('Error adding product:', error);
+                    alert('Error adding product. Please try again later.');
+                });
+        } else {
+
+        }
+    });
+})();
+</script>
+
+{{ plugin(route="/plugin/arp-skeleton/products?limit=3&orderby=price", method="get") }}
+<br>
+{# plugin(route="/plugin/foo-bar/test-json", method='post', data='{"a": 1, "b": 2}') #}
 
 </body>
 </html>
