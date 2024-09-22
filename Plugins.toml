@@ -1,6 +1,6 @@
 [plugins]
-arp-skeleton = { version = "0.1.0", path = "../arp-skeleton/target/release/libarp_skeleton.so", enabled = true }
-foo-bar = { version = "0.1.0", path = "../axum-plugin-router-skeleton/target/release/libaxum_plugin_router_skeleton.so", enabled = true }
+arp-skeleton = { version = "0.1.0", path = "plugins/libarp_skeleton.so", enabled = true }
+foo-bar = { version = "0.1.0", path = "plugins/libarp_foo_bar.so", enabled = true }
 ifthenpay = { version = "0.1.0", path = "../arp-ifthenpay/target/release/libarp_ifthenpay.so", enabled = false }
 xpto = { version = "0.0.1", path = "/path/to/libtest_plugin.so", enabled = false }
 abc = { version = "0.0.1", path = "/usr/lib/libxcb-xtest.so", enabled = false }

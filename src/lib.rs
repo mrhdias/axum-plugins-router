@@ -26,13 +26,6 @@ struct PluginRoute {
     response_type: String,
 }
 
-#[derive(Debug, Deserialize)]
-struct RoutesResponse {
-    routes: Vec<PluginRoute>,
-    message: String,
-    status: i32, 
-}
-
 #[derive(Debug, Clone, Deserialize)]
 struct Plugin {
     version: String,
@@ -57,10 +50,19 @@ static DEBUG: Lazy<bool> = Lazy::new(|| {
         .unwrap_or(false)
 });
 
-static LIBRARY_FILE: &str = "Plugins.toml";
+// static LIBRARY_FILE: &str = "Plugins.toml";
 
 static LIBRARIES: Lazy<HashMap<String, Mutex<Library>>> = Lazy::new(|| {
-    let toml_content = match std::fs::read_to_string(LIBRARY_FILE) {
+
+    let plugins_conf = std::env::var("PLUGINS_CONF")
+        .map(|val| val.is_empty()
+            .then_some("Plugins.toml".to_string())
+            .or(Some(val)).unwrap())
+        .unwrap_or("Plugins.toml".to_string());
+
+    println!("Load plugins configuration from: {}", plugins_conf);
+
+    let toml_content = match std::fs::read_to_string(plugins_conf) {
         Ok(content) => content,
         Err(e) => panic!("Error reading Plugins.toml: {}", e),
     };
@@ -241,15 +243,15 @@ impl Plugins {
                 }
             };
 
-            let list_ptr = routes_fn();
+            let route_list_ptr = routes_fn();
 
-            if list_ptr.is_null() {
+            if route_list_ptr.is_null() {
                 panic!("Received null pointer from routes function");
             }
 
             // clean this from memory
             let json_data = unsafe {
-                CStr::from_ptr(list_ptr).to_string_lossy().into_owned()
+                CStr::from_ptr(route_list_ptr).to_string_lossy().into_owned()
             };
 
             // Clean up memory allocated by plugin if necessary
@@ -261,17 +263,13 @@ impl Plugins {
             };
         
             // Free the memory
-            free_fn(list_ptr as *mut c_char);
+            free_fn(route_list_ptr as *mut c_char);
 
             if *DEBUG { println!("Routes Json: {}", json_data); }
 
-            let routes_response: RoutesResponse = serde_json::from_str(&json_data).unwrap();
+            let route_list: Vec<PluginRoute> = serde_json::from_str(&json_data).unwrap();
 
-            if routes_response.status != 0 {
-                panic!("Error loading routes: {}", routes_response.message);
-            }
-
-            for route in routes_response.routes {
+            for route in route_list {
                 // Load the plugin_route_function
 
                 let function: Symbol<extern "C" fn(*mut HeaderMap, *const c_char) -> *const c_char> = unsafe {

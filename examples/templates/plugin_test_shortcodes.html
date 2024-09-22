@@ -5,7 +5,7 @@
 </head>
 <body>
 
-{{ plugin(route="/plugin/foo-bar/test-get", method='get') | safe }}
+{{ plugin(route="/plugin/foo-bar/test-get", method='get', jscaller="true") | safe }}
 
 {% set my_vegetables = '["carrot", "potato", "tomato", "beet"]' %}
 {% set my_bag = '{
@@ -14,7 +14,7 @@
 }' %}
 
 <pre>
-Data from plugin function: {{ plugin(route="/plugin/foo-bar/test-json", method='post', data=my_bag) | safe }}
+Data from plugin function: {{ plugin(route="/plugin/foo-bar/test-json", method='post', data=my_bag, jscaller="true") | safe }}
 </pre>
 
 ARP-Skeleton Plugin
@@ -23,7 +23,7 @@ ARP-Skeleton Plugin
 <li>Test get request with query parameters: <a href="http://127.0.0.1:8080/plugin/arp-skeleton/products?limit=3&orderby=price">http://127.0.0.1:8080/plugin/arp-skeleton/products?limit=3&orderby=price</a></li>
 </ul>
 
-{{ plugin(route="/plugin/arp-skeleton/products?limit=3&orderby=price", method='get') | safe }}
+{{ plugin(route="/plugin/arp-skeleton/products?limit=3&orderby=price", method='get', jscaller="true") | safe }}
 
 <style>
 .groceries {
@@ -52,7 +52,7 @@ ARP-Skeleton Plugin
     text-shadow: 2px 2px 1px black;
 }
 </style>
-{{ plugin(route="/plugin/arp-skeleton/groceries", method='post') | safe }}
+{{ plugin(route="/plugin/arp-skeleton/groceries", method='post', jscaller="true") | safe }}
 
 <br>
 
@@ -99,7 +99,7 @@ ARP-Skeleton Plugin
 })();
 </script>
 
-{{ plugin(route="/plugin/arp-skeleton/products?limit=3&orderby=price", method="get") }}
+{{ plugin(route="/plugin/arp-skeleton/products?limit=3&orderby=price", method="get", jscaller="true") | safe }}
 <br>
 {# plugin(route="/plugin/foo-bar/test-json", method='post', data='{"a": 1, "b": 2}') #}
 

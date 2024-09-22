@@ -2,7 +2,7 @@
 name = "axum-router-plugin"
 version = "0.1.0"
 edition = "2021"
-description = "Shared library based plugins for axum"
+description = "Shared library-based plugins for Axum"
 keywords = ["axum", "plugins"]
 categories = ["plugins"]
 repository = "https://github.com/mrhdias/axum-router-plugin"
