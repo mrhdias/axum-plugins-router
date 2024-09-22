@@ -49,7 +49,7 @@ ls -la plugins
 nano -w Plugins.toml
 cargo run --example app
 ```
-In the `examples` directory, there is a `templates` directory that demonstrates how plugin routes can be used with shortcodes to display content provided by plugins.
+In the `examples` directory, there is a `templates` directory that demonstrates how plugin routes can be used with shortcodes to display content provided by plugins. The shortcodes are available through the Tera template engine.
 
 Usage Example:
 ```html
