@@ -1,6 +1,8 @@
 # axum-router-plugin
 Axum Router Plugin - Dynamically loadable libraries and routes
 
+[![Rust](https://github.com/mrhdias/axum-router-plugin/actions/workflows/rust.yml/badge.svg)](https://github.com/mrhdias/axum-router-plugin/actions/workflows/rust.yml)
+
 <ins>Attention</ins>: This project is in an experimental stage and may contain bugs or limitations. It has only been tested in a Linux environment.
 
 ## Description
