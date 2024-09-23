@@ -1,7 +1,69 @@
-//
-// plugins module
-//
-
+//! # Plugin-Based Axum Server
+//!
+//! This module provides functionality for dynamically loading and handling plugins in an Axum-based server.
+//! It allows plugins to define routes and functionality without the need to recompile the application
+//! whenever a plugin is activated or deactivated. Plugin management is handled through a configuration file,
+//! providing flexibility for dynamic behavior.
+//!
+//! The system is designed to facilitate extensibility by loading plugins that implement specific
+//! HTTP routes and handling request and response transformations, such as header manipulation and
+//! JSON response parsing.
+//!
+//! ## Key Features:
+//! - Dynamically load plugins from shared libraries at runtime.
+//! - Routes and functions from plugins are integrated into the Axum router.
+//! - Plugins can be enabled or disabled via a configuration file (`Plugins.toml`).
+//! - No need to recompile the main application to activate or deactivate a plugin.
+//! - **Note:** After enabling or disabling one or more plugins, it is necessary to restart the server
+//!   for the changes to take effect.
+//!
+//! ## Plugin Configuration:
+//! The `Plugins.toml` file contains plugin configuration, such as paths, versioning, and enabled state.
+//! Example `Plugins.toml` entry:
+//!
+//! ```toml
+//! [plugin_name]
+//! path = "path/to/plugin.so"
+//! version = "1.0"
+//! enabled = true
+//! ```
+//!
+//! ## Example Usage
+//! ```rust,no_run
+//! use axum_router_plugin::Plugins;
+//! use axum::{
+//!     routing::get,
+//!     Router,
+//! };
+//!
+//! #[tokio::main]
+//! async fn main() {
+//!     // Load plugins from the Plugins.toml file.
+//!     // You can change the location of the Plugins.toml file by setting
+//!     // the environment variable PLUGINS_CONF, for example:
+//!     // export PLUGINS_CONF=plugins/Plugins.toml
+//!     //
+//!     // Set the argument to true if you want to add the plugin name to the routes.
+//!     let axum_plugins = Plugins::new(Some(true));
+//!
+//!     // Load the plugins and create a router with the loaded plugins.
+//!     // If loading fails, the program will panic with an error message.
+//!     let plugins_router = match axum_plugins.load() {
+//!         Ok(router) => router,
+//!         Err(err) => panic!("Error loading plugins: {}", err),
+//!     };
+//!
+//!     // Build our application with a route.
+//!     // The plugins are nested under the "/plugin" path.
+//!     let _app = Router::new()
+//!         .route("/", get(|| async {
+//!             "Hello world!"
+//!         }))
+//!         .nest("/plugin", plugins_router);
+//! }
+//! ```
+//!
+//! This example demonstrates how to load plugins dynamically at runtime, configure routes, and nest plugin routes under a specified path.
 use std::path::PathBuf;
 use serde::Deserialize;
 use serde_json::Value;
@@ -18,6 +80,11 @@ use std::ffi::{c_char, CStr, CString};
 use once_cell::sync::Lazy;
 use std::sync::Mutex;
 
+/// Describes a plugin route configuration, which includes:
+/// - `path`: The URL path to handle.
+/// - `function`: The name of the function in the plugin.
+/// - `method_router`: The HTTP method (GET, POST) for this route.
+/// - `response_type`: Specifies the response format (e.g., `text`, `html`, `json`).
 #[derive(Debug, Deserialize)]
 struct PluginRoute {
     path: String,
@@ -26,32 +93,32 @@ struct PluginRoute {
     response_type: String,
 }
 
+/// Defines a plugin, with metadata such as:
+/// - `version`: The plugin version.
+/// - `path`: The file system path to the shared library.
+/// - `enabled`: Indicates whether the plugin is enabled.
 #[derive(Debug, Clone, Deserialize)]
 struct Plugin {
     version: String,
     path: String,
     enabled: bool,
-    // key: Option<String>,
 }
 
-#[derive(Deserialize, Debug)]
-pub struct PluginsConf {
-    plugins: HashMap<String, Plugin>,
-}
-
+/// Struct for managing plugin loading, routing, and naming behavior.
 #[derive(Deserialize, Debug)]
 pub struct Plugins {
     name_to_route: bool,
 }
 
+/// A global flag to enable or disable debug output, based on the `DEBUG` environment variable.
 static DEBUG: Lazy<bool> = Lazy::new(|| {
     std::env::var("DEBUG")
         .map(|val| val == "true")
         .unwrap_or(false)
 });
 
-// static LIBRARY_FILE: &str = "Plugins.toml";
-
+/// A global map that stores loaded plugin libraries, with the library protected by a `Mutex` to
+/// allow safe concurrent access.
 static LIBRARIES: Lazy<HashMap<String, Mutex<Library>>> = Lazy::new(|| {
 
     let plugins_conf = std::env::var("PLUGINS_CONF")
@@ -67,16 +134,14 @@ static LIBRARIES: Lazy<HashMap<String, Mutex<Library>>> = Lazy::new(|| {
         Err(e) => panic!("Error reading Plugins.toml: {}", e),
     };
 
-    // Parse the TOML content into the PluginsConfig struct
-    let plugins_config: PluginsConf = match toml::from_str(&toml_content) {
-        Ok(config) => config,
-        Err(e) => panic!("Error parsing Plugins.toml: {}", e),
-    };
+    // Parse the TOML content into a HashMap
+    let plugins: HashMap<String, Plugin> = toml::from_str(&toml_content)
+        .expect("Failed to parse Plugins.toml");
     
     let mut libraries = HashMap::new();
 
     // Load each library
-    for (name, plugin) in plugins_config.plugins {
+    for (name, plugin) in plugins {
         let plugin_path = PathBuf::from(&plugin.path);
 
         // Skip disabled plugins
@@ -104,51 +169,7 @@ static LIBRARIES: Lazy<HashMap<String, Mutex<Library>>> = Lazy::new(|| {
             }
         };
 
-        /*
-        if let Some(key) = plugin.key {
-            if key.is_empty() {
-                eprintln!(
-                    "Skipping plugin: {}: {} - empty key", 
-                    name, plugin_path.to_string_lossy()
-                );
-                continue;
-            }
-
-            eprintln!(
-                "Plugin: {} - Key: {}", 
-                name, key
-            );
-
-            let key_fn: Symbol<extern "C" fn(*const c_char) -> *const c_char> = unsafe {
-                match lib.get(b"key\0") {
-                    Ok(symbol) => symbol,
-                    Err(e) => panic!("Error getting key function: {}", e),
-                }
-            };
-
-            let c_key = CString::new(key).unwrap();
-
-            let result = key_fn(c_key.as_ptr());
-
-            // clean this from memory
-            let json_data = unsafe {
-                CStr::from_ptr(result).to_string_lossy().into_owned()
-            };
-
-            println!("Result: {}", json_data);
-
-            let free_fn: Symbol<extern "C" fn(*mut c_char)> = unsafe {
-                match lib.get(b"free\0") {
-                    Ok(symbol) => symbol,
-                    Err(e) => panic!("Error getting free function: {}", e),
-                }
-            };
-        
-            free_fn(result as *mut c_char);
-        }
-        */
-
-        println!("Plugin: {} Version: {}", name, plugin.version);
+        println!("Plugin loaded: {} Version: {}", name, plugin.version);
 
         libraries.insert(name, Mutex::new(lib));
     }
@@ -158,6 +179,37 @@ static LIBRARIES: Lazy<HashMap<String, Mutex<Library>>> = Lazy::new(|| {
 
 impl Plugins {
 
+    /// Creates a new instance of the `Plugins` struct.
+    ///
+    /// # Arguments
+    /// * `name_to_route` - An optional boolean indicating whether to prepend the plugin name to each route.
+    ///
+    /// # Returns
+    /// A new `Plugins` instance.
+    pub fn new(
+        name_to_route: Option<bool>,
+    ) -> Self {
+
+        Plugins {
+            name_to_route: match name_to_route {
+                Some(true) => true,
+                Some(false) => false,
+                None => false,
+            },
+        }
+    }
+
+    /// Handles the execution of a plugin's function, passing headers and body as arguments.
+    /// The function is executed in a blocking task, and memory is managed for the returned C string.
+    ///
+    /// # Arguments
+    /// * `headers` - The request headers.
+    /// * `body` - The request body as a string.
+    /// * `function` - A pointer to the plugin's function to execute.
+    /// * `free` - A pointer to the plugin's memory-freeing function.
+    ///
+    /// # Returns
+    /// The response as a string.
     async fn handle_route(
         headers: HeaderMap,
         body: String,
@@ -187,6 +239,14 @@ impl Plugins {
         }).await.unwrap()
     }
 
+    /// Sets the appropriate response type (text, HTML, JSON) based on the `response_type` argument.
+    ///
+    /// # Arguments
+    /// * `response` - The raw response string.
+    /// * `response_type` - The expected format of the response.
+    ///
+    /// # Returns
+    /// An Axum response.
     fn set_response(
         response: &str,
         response_type: &str,
@@ -212,6 +272,10 @@ impl Plugins {
         }
     }
 
+    /// Loads and merges routes from all enabled plugins into an Axum `Router`.
+    ///
+    /// # Returns
+    /// A result containing the constructed router or an error if a plugin fails to load.
     pub fn load(&self) -> Result<Router, libloading::Error> {
 
         let message = || -> String {
@@ -337,18 +401,5 @@ impl Plugins {
         }
 
         Ok(router)
-    }
-
-    pub fn new(
-        name_to_route: Option<bool>,
-    ) -> Self {
-
-        Plugins {
-            name_to_route: match name_to_route {
-                Some(true) => true,
-                Some(false) => false,
-                None => false,
-            },
-        }
     }
 }

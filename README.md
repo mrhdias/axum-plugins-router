@@ -28,7 +28,7 @@ async fn main() {
   // If loading fails, the program will panic with an error message.
   let plugins_router = match axum_plugins.load() {
     Ok(router) => router,
-      Err(err) => panic!("Error loading plugins: {}", err),
+    Err(err) => panic!("Error loading plugins: {}", err),
   };
 
   // Build our application with a route.
@@ -39,6 +39,27 @@ async fn main() {
     }))
     .nest("/plugin", plugins_router);
 }
+```
+
+## Plugin Configuration:
+To load the shared libraries, there must be a `Plugins.toml` file containing a list of libraries and their status. This file specifies the path, version, and whether each plugin is enabled.
+
+Example `Plugins.toml` entry:
+```toml
+[plugin_name]
+path = "path/to/plugin.so"
+version = "1.0"
+enabled = true
+```
+Is possible change the location of the Plugins.toml file by setting the environment variable PLUGINS_CONF.
+
+Example:
+```sh
+export PLUGINS_CONF=plugins/Plugins.toml
+# unset values in bash
+unset PLUGINS_CONF
+# unset values in fish
+set --erase PLUGINS_CONF
 ```
 
 ## How to test the provided example:
@@ -66,6 +87,8 @@ Data from plugin function:
 </pre>
 ```
 
+## Plugin Examples
+
 For more information about the plugins, refer to the plugin skeleton:
 ```sh
 git clone https://github.com/mrhdias/arp-skeleton
@@ -79,13 +102,6 @@ git clone https://github.com/mrhdias/arp-foo-bar
 cd arp-foo-bar
 cargo build --release
 cp target/release/libarp_foo_bar.so ../axum-router-plugin/plugins
-```
-To load the shared libraries, there must be a `Plugins.toml` file containing a list of libraries and their status. The file should follow the format shown below:
-
-Plugins.toml
-```toml
-[plugins]
-plugin_name = { version = "0.1.0", path = "./path/plugins/libplugin_test.so", enabled = true }
 ```
 
 Shared libraries must implement a `routes` function that returns a JSON array containing all available routes for the library.
