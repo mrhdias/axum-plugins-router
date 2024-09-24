@@ -86,10 +86,10 @@ set --erase PLUGINS_DIR
 git clone https://github.com/mrhdias/axum-router-plugin
 cd axum-router-plugin
 ls -la plugins
-nano -w Plugins.toml
+nano -w plugins/arp-skeleton/plugin.json
 cargo run --example app
 ```
-In the `examples` directory, there is a `templates` directory that demonstrates how plugin routes can be used with shortcodes to display content provided by plugins. The shortcodes are available through the Tera template engine.
+In the `examples` directory, there is a `templates` directory that demonstrates how plugin routes can be used with shortcodes to display content provided by plugins. The shortcodes are available through the [Tera](https://keats.github.io/tera) template engine.
 
 Usage Example:
 ```html
@@ -113,14 +113,16 @@ For more information about the plugins, refer to the plugin skeleton:
 git clone https://github.com/mrhdias/arp-skeleton
 cd arp-skeleton
 cargo build --release
-cp target/release/libarp_skeleton.so ../axum-router-plugin/plugins
+cp target/release/libarp_skeleton.so ../axum-router-plugin/plugins/arp-skeleton
+cp plugin.json ../axum-router-plugin/plugins/arp-skeleton
 ```
 Another plugin example:
 ```sh
 git clone https://github.com/mrhdias/arp-foo-bar
 cd arp-foo-bar
 cargo build --release
-cp target/release/libarp_foo_bar.so ../axum-router-plugin/plugins
+cp target/release/libarp_foo_bar.so ../axum-router-plugin/plugins/foo-bar
+cp plugin.json ../axum-router-plugin/plugins/foo-bar
 ```
 
 Shared libraries must implement a `routes` function that returns a JSON array containing all available routes for the library.
