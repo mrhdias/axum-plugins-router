@@ -1,0 +1,7 @@
+{
+    "name": "arp-skeleton",
+    "description": "Axum Router Plugin Skeleton",
+    "lib_path": "./libarp_skeleton.so",
+    "version": "0.1.0",
+    "enabled": true
+}

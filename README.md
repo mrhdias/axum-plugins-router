@@ -8,6 +8,14 @@ Axum Router Plugin - Dynamically loadable libraries and routes
 ## Description
 Early-stage, experimental Rust project that allows developers to dynamically load and unload shared libraries, similar to enabling or disabling plugins in WordPress. This flexibility enables developers to extend Axum web applications without recompiling the entire application. The system automatically generates routes for library functions and supports integration with template engines like Tera. A simple configuration file manages the loaded libraries, providing flexibility and extensibility for building custom web applications.
 
+Just like in WordPress, `plugins` reside in the `plugins` directory, each with its own configuration. Plugins may also include templates that can be used in the main application’s templates via the Tera [`include`](https://keats.github.io/tera/docs/#include) keyword.
+
+```html
+<div>
+  {% include "plugins/arp-gmail/templates/form.html" %}
+</div>
+```
+
 ## Usage Example:
 ```rust
 use axum_router_plugin::Plugins;
@@ -18,10 +26,14 @@ use axum::{
 
 #[tokio::main]
 async fn main() {
-  // Load plugins from the Plugins.toml file.
-  // You can change the location of the Plugins.toml file by setting
-  // the environment variable PLUGINS_CONF, for example:
-  // export PLUGINS_CONF=plugins/Plugins.toml
+  // Load plugins from the plugins directory.
+  // Each plugin must have its own directory containing a plugin.json file
+  // that provides information about the plugin, such as the library path,
+  // version, and whether it's enabled.
+  //
+  // You can change the location of the plugins directory by setting
+  // the environment variable PLUGINS_DIR, for example:
+  // export PLUGINS_DIR=path/to/plugins
   //
   // Set the argument to true if you want to add the plugin name to the routes.
   let axum_plugins = Plugins::new(Some(true));
@@ -44,24 +56,29 @@ async fn main() {
 ```
 
 ## Plugin Configuration:
-To load the shared libraries, there must be a `Plugins.toml` file containing a list of libraries and their status. This file specifies the path, version, and whether each plugin is enabled.
+To load shared libraries, there must be a `plugins` directory. Each plugin inside the `plugins` directory must include a `plugins.json` file. This file specifies the library path, version, and whether the plugin is enabled.
 
-Example `Plugins.toml` entry:
-```toml
-[plugin_name]
-path = "path/to/plugin.so"
-version = "1.0"
-enabled = true
+Example `plugins.json` entry:
+```json
+{
+  "name": "plugin_name",
+  "description": "Axum Router Plugin Example",
+  "lib_path": "./path/to/plugin.so",
+  "version": "0.1.0",
+  "license": "MIT",
+  "enabled": true
+}
 ```
-Is possible change the location of the Plugins.toml file by setting the environment variable PLUGINS_CONF.
+You can change the location of the plugins directory by setting the PLUGINS_DIR environment variable.
 
 Example:
 ```sh
-export PLUGINS_CONF=plugins/Plugins.toml
-# unset values in bash
-unset PLUGINS_CONF
-# unset values in fish
-set --erase PLUGINS_CONF
+# Set the plugins directory
+export PLUGINS_DIR=path/to/plugins
+# Unset the environment variable in bash
+unset PLUGINS_DIR
+# Unset the environment variable in fish
+set --erase PLUGINS_DIR
 ```
 
 ## How to test the provided example:

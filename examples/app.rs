@@ -42,7 +42,10 @@ async fn main() {
         Err(err) => panic!("Error loading plugins: {}", err),
     };
 
-    let mut tera = Tera::new("examples/templates/**/*").unwrap();
+    let mut tera = match Tera::new("examples/templates/**/*.html") {
+        Ok(tera) => tera,
+        Err(err) => panic!("Error initializing Tera: {}", err),
+    };
 
     let plugin_shortcode = plugin_shortcode::PluginShortcode::new();
 

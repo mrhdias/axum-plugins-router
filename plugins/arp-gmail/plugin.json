@@ -1,0 +1,7 @@
+{
+    "name": "arp-gmail",
+    "description": "Axum Router Plugin Gmail",
+    "lib_path": "./libarp_gmail.so",
+    "version": "0.1.0",
+    "enabled": true
+}

@@ -1,0 +1,8 @@
+{
+    "name": "foo-bar",
+    "description": "Axum Router Plugin Example",
+    "lib_path": "./libarp_foo_bar.so",
+    "version": "0.1.0",
+    "license": "MIT",
+    "enabled": true
+}

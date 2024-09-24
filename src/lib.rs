@@ -10,22 +10,26 @@
 //! JSON response parsing.
 //!
 //! ## Key Features:
-//! - Dynamically load plugins from shared libraries at runtime.
+//! - Load shared libraries as plugins.
 //! - Routes and functions from plugins are integrated into the Axum router.
-//! - Plugins can be enabled or disabled via a configuration file (`Plugins.toml`).
+//! - Plugins can be enabled or disabled via a configuration file (`plugin.json`).
 //! - No need to recompile the main application to activate or deactivate a plugin.
-//! - **Note:** After enabling or disabling one or more plugins, it is necessary to restart the server
+//! - **Note:** After adding, enabling, or disabling one or more plugins, it is necessary to restart the server
 //!   for the changes to take effect.
 //!
 //! ## Plugin Configuration:
-//! The `Plugins.toml` file contains plugin configuration, such as paths, versioning, and enabled state.
-//! Example `Plugins.toml` entry:
-//!
-//! ```toml
-//! [plugin_name]
-//! path = "path/to/plugin.so"
-//! version = "1.0"
-//! enabled = true
+//! Each plugin inside the `plugins` directory must include a `plugins.json` file. This file specifies the library path, version, and whether the plugin is enabled.
+//! 
+//! Example `plugin.json` entry:
+//! ```json
+//! {
+//!   "name": "plugin_name",
+//!   "description": "Axum Router Plugin Example",
+//!   "lib_path": "./path/to/plugin.so",
+//!   "version": "0.1.0",
+//!   "license": "MIT",
+//!   "enabled": true
+//! }
 //! ```
 //!
 //! ## Example Usage
@@ -38,10 +42,14 @@
 //!
 //! #[tokio::main]
 //! async fn main() {
-//!     // Load plugins from the Plugins.toml file.
-//!     // You can change the location of the Plugins.toml file by setting
-//!     // the environment variable PLUGINS_CONF, for example:
-//!     // export PLUGINS_CONF=plugins/Plugins.toml
+//!     // Load plugins from the plugins directory.
+//!     // Each plugin must have its own directory containing a plugin.json file
+//!     // that provides information about the plugin, such as the library path,
+//!     // version, and whether it's enabled.
+//!     //
+//!     // You can change the location of the plugins directory by setting
+//!     // the environment variable PLUGINS_DIR, for example:
+//!     // export PLUGINS_DIR=path/to/plugins
 //!     //
 //!     // Set the argument to true if you want to add the plugin name to the routes.
 //!     let axum_plugins = Plugins::new(Some(true));
@@ -64,7 +72,6 @@
 //! ```
 //!
 //! This example demonstrates how to load plugins dynamically at runtime, configure routes, and nest plugin routes under a specified path.
-use std::path::PathBuf;
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -94,13 +101,17 @@ struct PluginRoute {
 }
 
 /// Defines a plugin, with metadata such as:
+/// - `name`: The plugin name.
 /// - `version`: The plugin version.
 /// - `path`: The file system path to the shared library.
 /// - `enabled`: Indicates whether the plugin is enabled.
 #[derive(Debug, Clone, Deserialize)]
 struct Plugin {
+    name: String,
+    // description: Option<String>,
     version: String,
-    path: String,
+    // license: Option<String>,
+    lib_path: String,
     enabled: bool,
 }
 
@@ -121,57 +132,93 @@ static DEBUG: Lazy<bool> = Lazy::new(|| {
 /// allow safe concurrent access.
 static LIBRARIES: Lazy<HashMap<String, Mutex<Library>>> = Lazy::new(|| {
 
-    let plugins_conf = std::env::var("PLUGINS_CONF")
+    let plugins_dir = std::env::var("PLUGINS_DIR")
         .map(|val| val.is_empty()
-            .then_some("Plugins.toml".to_string())
-            .or(Some(val)).unwrap())
-        .unwrap_or("Plugins.toml".to_string());
+            .then_some("plugins".to_string()
+        )
+        .or(Some(val)).unwrap())
+        .unwrap_or("plugins".to_string());
 
-    println!("Load plugins configuration from: {}", plugins_conf);
+    let plugins_path = std::path::Path::new(&plugins_dir);
+    if !plugins_path.is_dir() {
+        eprintln!("Error: PLUGINS_DIR does not exist: {}", plugins_dir);
+        std::process::exit(1);
+    }
 
-    let toml_content = match std::fs::read_to_string(plugins_conf) {
-        Ok(content) => content,
-        Err(e) => panic!("Error reading Plugins.toml: {}", e),
-    };
+    println!("Load plugins from: {}", plugins_dir);
 
-    // Parse the TOML content into a HashMap
-    let plugins: HashMap<String, Plugin> = toml::from_str(&toml_content)
-        .expect("Failed to parse Plugins.toml");
-    
     let mut libraries = HashMap::new();
 
-    // Load each library
-    for (name, plugin) in plugins {
-        let plugin_path = PathBuf::from(&plugin.path);
-
-        // Skip disabled plugins
-        if !plugin.enabled {
-            eprintln!(
-                "Skipping plugin: {}: {} - disabled", 
-                name, plugin_path.to_string_lossy()
-            );
-            continue;
-        }
-
-        // Check if plugin file exists
-        if !plugin_path.is_file() {
-            eprintln!(
-                "Skipping plugin: {}: {} - plugin file not found", 
-                name, plugin_path.to_string_lossy()
-            );
-            continue;
-        }
-
-        let lib = unsafe {
-            match Library::new(&plugin_path) {
-                Ok(lib) => lib,
-                Err(e) => panic!("Error loading library {}: {}", plugin_path.to_string_lossy(), e),
+    for entry in std::fs::read_dir(plugins_path).unwrap() {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(e) => {
+                eprintln!("Error reading plugin directory entry: {}", e);
+                continue;
             }
         };
 
-        println!("Plugin loaded: {} Version: {}", name, plugin.version);
+        let path_dir = entry.path();
+        if path_dir.is_dir() {
+            println!("DIR: {}", path_dir.display());
+            let plugin_conf_path = path_dir.join("plugin.json");
+            if!plugin_conf_path.is_file() {
+                eprintln!("Error: Missing plugin.json in: {}", path_dir.display());
+                continue;
+            }
 
-        libraries.insert(name, Mutex::new(lib));
+            let file = std::fs::File::open(plugin_conf_path).unwrap();
+            let reader = std::io::BufReader::new(file);
+        
+            // Deserialize the JSON data into the struct
+            let plugin_conf: Plugin = match serde_json::from_reader(reader) {
+                Ok(config) => config,
+                Err(e) => {
+                    eprintln!("Error parsing plugin.json: {}", e);
+                    continue;
+                }
+            };
+
+            // Skip disabled plugins
+            if !plugin_conf.enabled {
+                eprintln!(
+                    "Skipping plugin: {}: {} - disabled", 
+                    plugin_conf.name, path_dir.display()
+                );
+                continue;
+            }
+
+            if plugin_conf.lib_path.is_empty() {
+                eprintln!(
+                    "Skipping plugin: {}: {} - no shared library path specified", 
+                    plugin_conf.name, path_dir.display()
+                );
+                continue;
+            }
+
+            let lib_path = plugin_conf.lib_path.starts_with('/')
+                .then_some(std::path::PathBuf::new().join(&plugin_conf.lib_path))
+                .or(Some(path_dir.join(&plugin_conf.lib_path))).unwrap();
+
+            if !lib_path.is_file() {
+                eprintln!(
+                    "Skipping plugin: {}: {} - shared library not found", 
+                    plugin_conf.name, path_dir.display()
+                );
+                continue;
+            }
+
+            let lib = unsafe {
+                match Library::new(&lib_path) {
+                    Ok(lib) => lib,
+                    Err(e) => panic!("Error loading library {}: {}", lib_path.display(), e),
+                }
+            };
+    
+            println!("Plugin loaded: {} Version: {}", plugin_conf.name, plugin_conf.version);
+    
+            libraries.insert(plugin_conf.name, Mutex::new(lib));
+        }
     }
 
     libraries
